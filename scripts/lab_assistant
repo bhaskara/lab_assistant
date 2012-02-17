@@ -135,14 +135,17 @@ def main():
             for k, v in file_params.iteritems():
                 parent = path.dirname(path.join(d, v))
                 if not path.exists(parent):
-                    stderr.write("Creating {0}\n".format(parent))
                     os.makedirs(parent)
             with open(os.path.join(d, 'out.log'), 'w') as outfile:
                 with open(os.path.join(d, 'err.log'), 'w') as errfile:
                     args = make_invocation(executable, s, d, file_params)
                     stderr.write("Running {0}... ".format(' '.join(args)))
-                    sp.check_call(args, stdout=outfile, stderr=errfile)
-                    stderr.write("done\n")
+                    try:
+                        sp.check_call(args, stdout=outfile, stderr=errfile)
+                        stderr.write("done\n")
+                    except sp.CalledProcessError as e:
+                        stderr.write("exited with return code {0}\n".\
+                                     format(e.returncode))
 
         f.write("completed: true\n")
 
