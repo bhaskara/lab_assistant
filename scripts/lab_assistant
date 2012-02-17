@@ -8,7 +8,7 @@ import optparse
 from os import path
 import re
 import time
-import subprocess
+import subprocess as sp
 from sys import stderr
 import shutil as sh
 
@@ -72,6 +72,22 @@ def setup_dirs(d, config_str):
     with open(path.join(d, 'config.yaml'), 'w') as f:
         f.write(config_str)
 
+def process_vcs(config, path):
+    vcs_config = config.get('vcs', None)
+    if not vcs_config:
+        return ''
+    assert vcs_config['type'] == 'git'
+    p = sp.Popen(['git', 'diff'], stdout=sp.PIPE, cwd=path)
+    out, err = p.communicate()
+    assert not out.strip(), "Uncommitted changes in git repository: {0}".\
+           format(out)
+    p = sp.Popen(['git', 'rev-parse', 'HEAD'], stdout=sp.PIPE,
+                 cwd=path)
+    out, err = p.communicate()
+    assert p.returncode==0
+    return "vcs:\n  type: git\n  commit: {0}\n".format(out.strip())
+    
+
 def main():
     parser = optparse.OptionParser()
     parser.add_option('-l', '--log_dir', default=os.getenv('LAB_ASSISTANT_LOG_DIR', '.'))
@@ -81,6 +97,7 @@ def main():
         print "Usage: {0} CONFIG_FILE".format(sys.argv[0])
         return 1
 
+    assert args[0]!='exp_info.yaml', "Forbidden name for config file"
     with open(args[0]) as f:
         config_str = f.read()
     config = yaml.load(config_str)
@@ -94,12 +111,14 @@ def main():
         print "Directory {0} already exists".format(outdir)
         return 1
 
+    config_dir = path.abspath(path.dirname(args[0]))
+    vcs_info = process_vcs(config, config_dir)
     setup_dirs(outdir, config_str)
-    with open(path.join(outdir, 'run_info.yaml'), 'w') as f:
+    with open(path.join(outdir, 'exp_info.yaml'), 'w') as f:
+        f.write(vcs_info)
         settings = param_settings(config)
         variable_params = get_variable_params(config)
-        executable = path.abspath(path.join(path.dirname(args[0]),
-                                            config['executable']))
+        executable = path.join(config_dir, config['executable'])
         f.write("executable: {0}\n".format(executable))
 
         for s in settings:
@@ -109,7 +128,7 @@ def main():
                 with open(os.path.join(d, 'err.log'), 'w') as errfile:
                     args = make_invocation(executable, s)
                     stderr.write("Running with args {0}... ".format(s))
-                    subprocess.check_call(args, stdout=outfile, stderr=errfile)
+                    sp.check_call(args, stdout=outfile, stderr=errfile)
                     stderr.write("done\n")
 
         f.write("completed: true\n")
