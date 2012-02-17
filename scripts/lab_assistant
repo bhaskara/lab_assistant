@@ -12,12 +12,6 @@ import subprocess
 from sys import stderr
 import shutil as sh
 
-def alist_to_dict(l):
-    d = {}
-    for x, y in l:
-        d[x] = y
-    return d
-
 def param_range(r):
     if isinstance(r, list):
         return r
@@ -41,7 +35,7 @@ def make_invocation(executable, params):
 
 def param_settings(config):
     ranges = [(name, param_range(val)) for name, val in config['params'].iteritems()]
-    return map(alist_to_dict, param_combinations(ranges))
+    return map(dict, param_combinations(ranges))
 
 def make_name(n):
     m = re.match('(.*)\.', n)
@@ -54,10 +48,14 @@ def get_time_stamp():
     return time.strftime('%Y-%m-%d-%H-%M-%S', time.localtime())
 
 def get_variable_params(config):
-    l = [name for name, val in config['params'].iteritems() if\
-         isinstance(val, list) or isinstance(val, dict)]
-    l.sort()
-    return l
+    var = []
+    fixed = []
+    for name, val in config['params'].iteritems():
+        if isinstance(val, list) or isinstance(val, dict):
+            var.append(name)
+        else:
+            fixed.append(name)
+    return var, fixed
 
 def run_name(s, params):
     return '_'.join(str(s[p]) for p in params)
@@ -72,20 +70,23 @@ def setup_dirs(d, config_str):
     with open(path.join(d, 'config.yaml'), 'w') as f:
         f.write(config_str)
 
+def subdict(d, keys):
+    return dict((k, v) for k, v in d.iteritems() if k in keys)
+        
+
 def main():
     parser = optparse.OptionParser()
     parser.add_option('-l', '--log_dir', default=os.getenv('LAB_ASSISTANT_LOG_DIR', '.'))
+    parser.add_option('-c', '--config_file')
     options, args = parser.parse_args()
-    
-    if len(args)<1:
-        print "Usage: {0} CONFIG_FILE".format(sys.argv[0])
-        return 1
 
-    with open(args[0]) as f:
+    assert len(args)==0
+
+    with open(options.config_file) as f:
         config_str = f.read()
     config = yaml.load(config_str)
 
-    name = config.get('name', make_name(args[0]))
+    name = config.get('name', make_name(options.config_file))
     stamp = get_time_stamp()
     outdir = path.join(options.log_dir, name, stamp)
     stderr.write("Output dir is {0}\n".format(outdir))
@@ -97,10 +98,12 @@ def main():
     setup_dirs(outdir, config_str)
     with open(path.join(outdir, 'run_info.yaml'), 'w') as f:
         settings = param_settings(config)
-        variable_params = get_variable_params(config)
-        executable = path.abspath(path.join(path.dirname(args[0]),
+        variable_params, fixed_params = get_variable_params(config)
+        executable = path.abspath(path.join(path.dirname(options.config_file),
                                             config['executable']))
         f.write("executable: {0}\n".format(executable))
+        fixed_args = subdict(config['params'], fixed_params)
+        stderr.write("fixed params: {0}\n".format(fixed_args))
 
         for s in settings:
             d = os.path.join(outdir, run_name(s, variable_params))
@@ -108,7 +111,7 @@ def main():
             with open(os.path.join(d, 'out.log'), 'w') as outfile:
                 with open(os.path.join(d, 'err.log'), 'w') as errfile:
                     args = make_invocation(executable, s)
-                    stderr.write("Running with args {0}... ".format(s))
+                    stderr.write("Running with args {0}... ".format(subdict(s, variable_params)))
                     subprocess.check_call(args, stdout=outfile, stderr=errfile)
                     stderr.write("done\n")
 
