@@ -73,13 +73,18 @@ def get_variable_params(config):
 def run_name(s, params):
     return '_'.join(str(s[p]) for p in params)
 
-def setup_dirs(d, config_str):
+def create_or_update_link(path, name, target):
+    "Ensure that PATH/NAME points to TARGET.  Remove any existing link or file PATH/NAME."
+    f = path.join(path, name)
+    if path.exists(f):
+        os.remove(f)
+    os.symlink(target, f)
+
+def setup_dirs(d, config_str, root):
     par = path.dirname(d)
     os.makedirs(d)
-    latest = os.path.join(par, 'latest')
-    if path.exists(latest):
-        os.remove(latest)
-    os.symlink(d, os.path.join(par, 'latest'))
+    create_or_update_link(par, 'latest', d)
+    create_or_update_link(root, 'latest', d)
     with open(path.join(d, 'config.yaml'), 'w') as f:
         f.write(config_str)
 
@@ -119,7 +124,7 @@ def main():
     outdir = path.join(options.log_dir, name, stamp)
     stderr.write("Output dir is {0}\n".format(outdir))
 
-    if os.path.exists(outdir):
+    if path.exists(outdir):
         print "Directory {0} already exists".format(outdir)
         return 1
 
@@ -129,7 +134,7 @@ def main():
     variable_params, fixed_params = get_variable_params(config)
     executable = path.join(config_dir, config['executable'])
     file_params = get_file_params(config)
-    setup_dirs(outdir, config_str)
+    setup_dirs(outdir, config_str, options.log_dir)
     with open(path.join(outdir, 'exp_info.yaml'), 'w') as f:
         f.write(vcs_info)
         f.write("executable: {0}\n".format(executable))
@@ -138,14 +143,16 @@ def main():
 
         config_num = 0
         for s in settings:
-            d = os.path.join(outdir, run_name(s, variable_params))
+            d = path.join(outdir, run_name(s, variable_params))
             os.mkdir(d)
             for k, v in file_params.iteritems():
                 parent = path.dirname(path.join(d, v))
                 if not path.exists(parent):
                     os.makedirs(parent)
-            with open(os.path.join(d, 'out.log'), 'w') as outfile:
-                with open(os.path.join(d, 'err.log'), 'w') as errfile:
+            outfile_path = path.join(d, 'out.log')
+            errfile_path = path.join(d, 'err.log')
+            with open(outfile_path, 'w') as outfile:
+                with open(errfile_path, 'w') as errfile:
                     args = make_invocation(executable, s, d, file_params)
                     stderr.write("\nConfiguration {0}\n".format(config_num))
                     for k in variable_params:
@@ -156,7 +163,11 @@ def main():
                     while True:
                         if p.poll() is not None:
                             break
-                        stderr.write("\rElapsed time: {0}".format(elapsed_time))
+                        
+                        stderr.write("\r  Elapsed time is {0} seconds.  "
+                                     "{1} bytes written on stdout and {2} bytes on stderr".\
+                                     format(elapsed_time, path.getsize(outfile_path),
+                                            path.getsize(errfile_path)))
                         inc = 1
                         time.sleep(inc)
                         elapsed_time += inc
