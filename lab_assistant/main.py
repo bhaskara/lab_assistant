@@ -1,16 +1,14 @@
-#!/usr/bin/env python
-
-import sys
+import optparse
 import yaml
 import math
 import os
-import optparse
 from os import path
 import re
 import time
 import subprocess as sp
 from sys import stderr
 import shutil as sh
+
 
 def param_range(r):
     if isinstance(r, list):
@@ -73,9 +71,9 @@ def get_variable_params(config):
 def run_name(s, params):
     return '_'.join(str(s[p]) for p in params)
 
-def create_or_update_link(path, name, target):
+def create_or_update_link(p, name, target):
     "Ensure that PATH/NAME points to TARGET.  Remove any existing link or file PATH/NAME."
-    f = path.join(path, name)
+    f = path.join(p, name)
     if path.exists(f):
         os.remove(f)
     os.symlink(target, f)
@@ -158,6 +156,8 @@ def main():
                     for k in variable_params:
                         stderr.write("  {0}: {1}\n".format(k, s[k]))
                     config_num += 1
+                    print outfile_path
+                    print errfile_path
                     p = sp.Popen(args, stdout=outfile, stderr=errfile)
                     elapsed_time = 0
                     while True:
@@ -179,5 +179,3 @@ def main():
         f.write("completed: true\n")
                 
     
-if __name__ == '__main__':
-    sys.exit(main())
