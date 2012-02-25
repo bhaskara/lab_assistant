@@ -69,7 +69,8 @@ def get_variable_params(config):
     return var, fixed
 
 def run_name(s, params):
-    return '_'.join(str(s[p]) for p in params)
+    prefix = '_'.join(str(s[p]) for p in params)
+    return prefix+"_out"
 
 def create_or_update_link(p, name, target):
     "Ensure that PATH/NAME points to TARGET.  Remove any existing link or file PATH/NAME."
